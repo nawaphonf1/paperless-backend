@@ -25,6 +25,8 @@ from app.models.doc import Doc
 from app.models.doc_path import DocPath
 from app.models.doc_recipter import DocRecipter
 from app.models.doc_history import DocHistory
+# DocSign
+from app.models.doc_sign import DocSign
 
 from base64 import b64decode
 
@@ -208,6 +210,90 @@ def action_doc(
     if action == "reject":
         reject_doc = DocService.reject_doc(db, doc_id, current_user,reject_text)
 
+# upload doc file
+@router.post("/upload/sign/{doc_id}")
+def upload_doc_files(
+    doc_id: int,
+    description: Optional[str] = None,
+    files: List[UploadFile] = File(...),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    """
+    Upload multiple document files.
+    """
+    # ตรวจสอบว่าเอกสารนี้มีอยู่หรือไม่
+    existing_doc = db.query(Doc).filter(Doc.doc_id == doc_id).first()
+    if not existing_doc:
+        raise HTTPException(status_code=404, detail="Document not found")
+    
+    units = get_unit_by_username(db, current_user.username)
 
+    upload_dir = Path("sign") / str(existing_doc.doc_name)
+    upload_dir.mkdir(parents=True, exist_ok=True)
 
+    saved_paths = []
 
+    for file in files:
+        file_path = upload_dir / file.filename
+
+        with file_path.open("wb") as buffer:
+            shutil.copyfileobj(file.file, buffer)
+
+        # สร้าง record ใน DocPath
+        doc_path = DocSign(
+            doc_id=doc_id,
+            units_id = units.units_id, 
+            path=str(file_path), 
+            sign_desc=description,
+            created_by=current_user.username)
+        db.add(doc_path)
+        saved_paths.append(str(file_path))
+
+    db.commit()
+
+    return {
+        "message": f"{len(saved_paths)} files uploaded successfully.",
+        "files": saved_paths
+    }
+
+# get doc sign by doc_id
+@router.get("/sign/{doc_id}")
+def get_doc_sign_by_doc_id(
+    doc_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    """
+    Get document sign by document ID.
+    """
+    doc_signs = db.query(DocSign).filter(DocSign.doc_id == doc_id).all()
+    if not doc_signs:
+        raise HTTPException(status_code=404, detail="Document sign not found")
+    return doc_signs
+
+# del doc_sign by doc_sign_id
+@router.delete("/sign/{doc_sign_id}")
+def delete_doc_sign(
+    doc_sign_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    """
+    Delete a document sign by its ID.
+    """
+    doc_sign = db.query(DocSign).filter(DocSign.doc_sign_id == doc_sign_id).first()
+    if not doc_sign:
+        raise HTTPException(status_code=404, detail="Document sign not found")
+
+    db.delete(doc_sign)
+    db.commit()
+
+    # Delete the file from the filesystem
+    file_path = Path(doc_sign.path)
+    if file_path.exists():
+        file_path.unlink()
+    else:
+        raise HTTPException(status_code=404, detail="File not found on server")
+
+    return {"message": "Document sign deleted successfully"}

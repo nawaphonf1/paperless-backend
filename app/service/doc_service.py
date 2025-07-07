@@ -102,7 +102,7 @@ class DocService:
             return None
 
         if doc.doc_type == "กองร้อย":
-            unit = db.query(DocRecipter.doc_recipter_id,Dept.dept_name.label("unit_name")).\
+            unit = db.query(DocRecipter.doc_recipter_id,Dept.dept_name_short.label("unit_name")).\
                 join(Dept, DocRecipter.units_id == Dept.dept_id).\
                 filter(DocRecipter.doc_id == doc_id).all()
         else:
