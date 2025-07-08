@@ -4,6 +4,7 @@ import shutil
 from typing import List
 from fastapi.responses import StreamingResponse
 from datetime import date
+from io import BytesIO
 
 from sqlalchemy.orm import Session
 from ...database import SessionLocal
@@ -13,6 +14,7 @@ from app.database import get_db
 from typing import Optional
 from urllib.parse import quote
 
+from app.supabase import supabase
 # import service
 from app.service.doc_service import DocService
 from app.service.unit_service import get_unit_by_username
@@ -99,6 +101,29 @@ def get_doc_history(
     docs = DocService.get_doc_history(db, current_user, page, size)
     return docs
 
+
+import re
+import unicodedata
+from uuid import uuid4
+
+def sanitize_filename(filename: str) -> str:
+    # ตัดนามสกุลออกชั่วคราว
+    name, ext = filename.rsplit('.', 1)
+
+    # แปลงอักขระไทยเป็น ASCII (เช่น ะ,า,อ จะหาย → ป้องกัน error)
+    name = unicodedata.normalize('NFKD', name).encode('ascii', 'ignore').decode('ascii')
+
+    # ลบทุกตัวที่ไม่ใช่ a-z, A-Z, 0-9, _, -
+    name = re.sub(r'[^\w\-]', '_', name)
+
+    # ตัดให้สั้นหน่อย ป้องกัน path ยาวเกิน
+    name = name[:50]
+
+    # สร้างชื่อใหม่แบบสุ่ม + ต่อ .pdf
+    return f"{name}_{uuid4().hex[:8]}.{ext}"
+
+
+
 # upload doc file
 @router.post("/upload/{doc_id}")
 def upload_doc_files(
@@ -107,36 +132,38 @@ def upload_doc_files(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
-    """
-    Upload multiple document files.
-    """
-    # ตรวจสอบว่าเอกสารนี้มีอยู่หรือไม่
     existing_doc = db.query(Doc).filter(Doc.doc_id == doc_id).first()
     if not existing_doc:
         raise HTTPException(status_code=404, detail="Document not found")
 
-    upload_dir = Path("uploads") / str(existing_doc.doc_name)
-    upload_dir.mkdir(parents=True, exist_ok=True)
-
     saved_paths = []
 
     for file in files:
-        file_path = upload_dir / file.filename
+        contents = file.file.read()
+        safe_filename = sanitize_filename(file.filename)
+        file_path = f"{existing_doc.doc_name}/{safe_filename}"
 
-        with file_path.open("wb") as buffer:
-            shutil.copyfileobj(file.file, buffer)
 
-        # สร้าง record ใน DocPath
-        doc_path = DocPath(doc_id=doc_id, path=str(file_path), created_by=current_user.username)
+
+        try:
+            res = supabase.storage.from_("1").upload(file_path, contents, {
+                "content-type": file.content_type
+            })
+        except Exception as e:
+            raise HTTPException(status_code=500, detail=f"Upload failed: {str(e)}")
+
+        # บันทึก path ลง DB
+        doc_path = DocPath(doc_id=doc_id, path=file_path, created_by=current_user.username)
         db.add(doc_path)
-        saved_paths.append(str(file_path))
+        saved_paths.append(file_path)
 
     db.commit()
 
     return {
-        "message": f"{len(saved_paths)} files uploaded successfully.",
+        "message": f"{len(saved_paths)} files uploaded to Supabase.",
         "files": saved_paths
     }
+
 
 # get doc by id
 @router.get("/{doc_id}", response_model=DocRespone)
@@ -150,30 +177,35 @@ def get_doc_by_id(
         raise HTTPException(status_code=404, detail="Document not found")
     return doc
 
-@router.get("/download/{path:path}")  # <- ต้องระบุ :path เพื่อรองรับ path ที่มี /
+
+@router.get("/download/{path:path}")
 def download_doc_file(
     path: str,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
-    file_path = Path(path)
+    try:
+        # ดาวน์โหลดไฟล์จาก Supabase Storage
+        res = supabase.storage.from_("1").download(path)  # res เป็น bytes แล้ว
+        file_bytes = res  # ไม่ต้อง .read()
+    except Exception as e:
+        raise HTTPException(status_code=404, detail=f"File not found: {str(e)}")
 
-    if not file_path.exists():
-        raise HTTPException(status_code=404, detail="File not found on server")
-
-    filename = file_path.name
-    quoted_filename = quote(filename)  # เปลี่ยนชื่อไฟล์เป็น URL-encoded
+    filename = Path(path).name
+    quoted_filename = quote(filename)
 
     return StreamingResponse(
-        file_path.open("rb"),
+        BytesIO(file_bytes),
         media_type="application/octet-stream",
         headers={
-            # ป้องกันปัญหาชื่อไฟล์ภาษาไทย
             "Content-Disposition": f"attachment; filename*=UTF-8''{quoted_filename}"
         }
     )
 
-    # get doc history by doc_id
+
+
+
+# get doc history by doc_id
 @router.get("/history/{doc_id}", response_model=List[HistoryCreate])
 def get_doc_history_by_doc_id(
     doc_id: int,
@@ -229,18 +261,23 @@ def upload_doc_files(
     
     units = get_unit_by_username(db, current_user.username)
 
-    upload_dir = Path("sign") / str(existing_doc.doc_name)
-    upload_dir.mkdir(parents=True, exist_ok=True)
-
     saved_paths = []
 
     for file in files:
-        file_path = upload_dir / file.filename
+        contents = file.file.read()
+        safe_filename = sanitize_filename(file.filename)
+        file_path = f"sign/{existing_doc.doc_name}/{safe_filename}"
 
-        with file_path.open("wb") as buffer:
-            shutil.copyfileobj(file.file, buffer)
 
-        # สร้าง record ใน DocPath
+
+        try:
+            res = supabase.storage.from_("1").upload(file_path, contents, {
+                "content-type": file.content_type
+            })
+        except Exception as e:
+            raise HTTPException(status_code=500, detail=f"Upload failed: {str(e)}")
+
+        # บันทึก path ลง DB
         doc_path = DocSign(
             doc_id=doc_id,
             units_id = units.units_id, 
