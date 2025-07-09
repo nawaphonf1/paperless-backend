@@ -17,6 +17,8 @@ class Token(BaseModel):
     access_token: str
     token_type: str
     role: Optional[str] = None
+    unit_name: Optional[str] = None
+    unit_img: Optional[str] = None
     permission: Optional[List[PermissionR]] = None
 
 

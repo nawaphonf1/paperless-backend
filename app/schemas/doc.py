@@ -14,10 +14,13 @@ class DocBase(BaseModel):
     created_at: datetime
     updated_at: datetime
 
+class PathResponse(BaseModel):
+    path: str
+    file_name: Optional[str] = None
 class DocRespone(DocBase):
     doc_id: int
     doc_recipters: Optional[List[str]] = None
-    paths:  Optional[List[str]] = None
+    paths: Optional[List[PathResponse]] = None
 
     class Config:
         orm_mode = True

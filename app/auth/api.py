@@ -5,6 +5,12 @@ from app.database import get_db
 from app.auth.services import create_user, authenticate_user, create_access_token, get_permission_by_units_id
 from app.auth.schemas import UserCreate, Token, LoginRequest
 from app.auth.dependencies import get_current_user
+from app.models.units import Unit
+from app.models.dept import Dept
+from app.models.position import Position
+
+
+from sqlalchemy.sql import func,and_, or_
 
 router = APIRouter()
 
@@ -31,9 +37,27 @@ def login_user(
 
     permission = get_permission_by_units_id(db=db, units_id=user.units_id)
     
+    unit_name = None
+    unit_img = None
+
+    unit = db.query(
+            Unit.img_path,
+            func.concat(Position.position_name_short, ' ', Unit.first_name, ' ', Unit.last_name).label("unit_name")
+            ).\
+                select_from(Unit).\
+                join(Position, Position.position_id == Unit.position_id).\
+                filter(Unit.units_id == user.units_id).\
+                first()
+
+    if unit:
+        unit_name = unit.unit_name
+        unit_img = unit.img_path
+
     return {
         "access_token": access_token, 
         "token_type": "bearer", 
         "role": user.role,
-        "permission": permission
+        "permission": permission,
+        "unit_name": unit_name,
+        "unit_img": unit_img
         }

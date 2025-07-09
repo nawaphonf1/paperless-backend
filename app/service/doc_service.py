@@ -14,7 +14,7 @@ from app.models.doc_history import DocHistory
 from app.auth.models import User
 
 # schemas
-from app.schemas.doc import DocBase, DocRespone, DocCreate, DocHistorySchemas,DocReceived, DocReceivedPagination, DocHistoryPagination, HistoryCreate
+from app.schemas.doc import DocBase, DocRespone, DocCreate, DocHistorySchemas,DocReceived, DocReceivedPagination, DocHistoryPagination, HistoryCreate, PathResponse
 
 # service
 from app.service.unit_service import get_unit_by_username
@@ -113,7 +113,14 @@ class DocService:
         recipter_name = [recipter.unit_name for recipter in unit]
 
         doc_paths = db.query(DocPath).filter(DocPath.doc_id == doc_id).all()
-        paths = [d.path for d in doc_paths]
+        paths = []
+        for d in doc_paths:
+            paths.append({
+                "path": d.path,
+                "file_name": d.file_name
+
+            }   
+        )
 
         return DocRespone(
             doc_id=doc.doc_id,

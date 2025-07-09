@@ -48,3 +48,19 @@ class UnitResponse(BaseModel):
 class UnitListResponse(BaseModel):
     items: List[UnitResponse]
     total: int
+
+class Me(BaseModel):
+    units_id: int
+    username: Optional[str] = None
+    first_name: str
+    last_name: str
+    is_active: Optional[bool] = True
+    img_path: Optional[str] = None
+    position_id: Optional[int] = None
+    dept_id: Optional[int] = None
+    identify_soldier_id: Optional[str] = None
+
+    class Config:
+        orm_mode = True
+class MeUpdate(Me):
+    new_password: Optional[str] = None

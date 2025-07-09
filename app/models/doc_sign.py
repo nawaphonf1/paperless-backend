@@ -18,3 +18,4 @@ class DocSign(Base):
     sign_desc = Column(Text, nullable=True)
     created_by = Column(Text, nullable=False)
     created_at = Column(DateTime, nullable=False, server_default=func.now())
+    file_name = Column(String(255), nullable=False)

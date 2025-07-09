@@ -153,7 +153,7 @@ def upload_doc_files(
             raise HTTPException(status_code=500, detail=f"Upload failed: {str(e)}")
 
         # บันทึก path ลง DB
-        doc_path = DocPath(doc_id=doc_id, path=file_path, created_by=current_user.username)
+        doc_path = DocPath(doc_id=doc_id, path=file_path, created_by=current_user.username, file_name=file.filename)
         db.add(doc_path)
         saved_paths.append(file_path)
 
@@ -265,10 +265,11 @@ def upload_doc_files(
 
     for file in files:
         contents = file.file.read()
+        print(file.filename)
         safe_filename = sanitize_filename(file.filename)
+        print(file.filename)
+
         file_path = f"sign/{existing_doc.doc_name}/{safe_filename}"
-
-
 
         try:
             res = supabase.storage.from_("1").upload(file_path, contents, {
@@ -283,7 +284,8 @@ def upload_doc_files(
             units_id = units.units_id, 
             path=str(file_path), 
             sign_desc=description,
-            created_by=current_user.username)
+            created_by=current_user.username,
+            file_name=file.filename)
         db.add(doc_path)
         saved_paths.append(str(file_path))
 
@@ -326,11 +328,10 @@ def delete_doc_sign(
     db.delete(doc_sign)
     db.commit()
 
-    # Delete the file from the filesystem
-    file_path = Path(doc_sign.path)
-    if file_path.exists():
-        file_path.unlink()
-    else:
-        raise HTTPException(status_code=404, detail="File not found on server")
+        # 🔥 ลบจาก Supabase storage
+    res = supabase.storage.from_("1").remove([doc_sign.path])
+    if not res:
+        raise HTTPException(status_code=500, detail="Failed to delete file from Supabase")
+
 
     return {"message": "Document sign deleted successfully"}
