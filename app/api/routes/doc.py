@@ -138,7 +138,10 @@ def upload_doc_files(
 
     saved_paths = []
 
-    flodername = sanitize_filename(existing_doc.doc_name)
+    flodername = existing_doc.doc_name
+    flodername = f"{flodername}_{uuid4().hex[:8]}"
+    flodername = unicodedata.normalize('NFKD', flodername).encode('ascii', 'ignore').decode('ascii')
+    flodername = re.sub(r'[^\w\-]', '_', flodername)
 
     for file in files:
         contents = file.file.read()
@@ -265,7 +268,10 @@ def upload_doc_files(
 
     saved_paths = []
 
-    flodername = sanitize_filename(existing_doc.doc_name)
+    flodername = existing_doc.doc_name
+    flodername = f"{flodername}_{uuid4().hex[:8]}"
+    flodername = unicodedata.normalize('NFKD', flodername).encode('ascii', 'ignore').decode('ascii')
+    flodername = re.sub(r'[^\w\-]', '_', flodername)
 
     for file in files:
         contents = file.file.read()
