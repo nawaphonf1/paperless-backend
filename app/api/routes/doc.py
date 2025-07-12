@@ -138,10 +138,12 @@ def upload_doc_files(
 
     saved_paths = []
 
+    flodername = sanitize_filename(existing_doc.doc_name)
+
     for file in files:
         contents = file.file.read()
         safe_filename = sanitize_filename(file.filename)
-        file_path = f"{existing_doc.doc_name}/{safe_filename}"
+        file_path = f"{flodername}/{safe_filename}"
 
 
 
@@ -263,13 +265,15 @@ def upload_doc_files(
 
     saved_paths = []
 
+    flodername = sanitize_filename(existing_doc.doc_name)
+
     for file in files:
         contents = file.file.read()
         print(file.filename)
         safe_filename = sanitize_filename(file.filename)
         print(file.filename)
 
-        file_path = f"sign/{existing_doc.doc_name}/{safe_filename}"
+        file_path = f"sign/{flodername}/{safe_filename}"
 
         try:
             res = supabase.storage.from_("1").upload(file_path, contents, {
